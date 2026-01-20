@@ -2,5 +2,7 @@
 venv/
 __pycache__/
 output/
+input/
 .DS_Store
 *.pyc
+job-agent-docs.md

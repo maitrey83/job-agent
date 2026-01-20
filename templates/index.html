@@ -78,6 +78,26 @@
                     </div>
 
                     <div class="form-group">
+                        <label>Outreach Message Type</label>
+                        <div class="tags-input-container">
+                            <div class="tag-choice">
+                                <input type="radio" id="msg_role" name="message_type" value="role_specific" checked>
+                                <label for="msg_role">Role-Specific (Job)</label>
+                            </div>
+                            <div class="tag-choice">
+                                <input type="radio" id="msg_exploratory" name="message_type" value="exploratory">
+                                <label for="msg_exploratory">Exploratory (Advice)</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="specific_hook">Specific Hook / Research (Crucial)</label>
+                        <textarea id="specific_hook" name="specific_hook" rows="3"
+                            placeholder="e.g. 'I read your article on Microservices...' OR 'We both attended University of X...' (This makes your message stand out!)"></textarea>
+                    </div>
+
+                    <div class="form-group">
                         <label for="fit_note">Why are you a good fit? (Optional)</label>
                         <textarea id="fit_note" name="fit_note" rows="2"
                             placeholder="e.g. I have 5 years of experience with Python..."></textarea>

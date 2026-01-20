@@ -5,6 +5,8 @@ import dotenv
 import google.generativeai as genai
 import requests
 from bs4 import BeautifulSoup
+import json
+import re
 
 # Load environment variables and configure API
 dotenv.load_dotenv()
@@ -127,16 +129,80 @@ def create_outreach_email_prompt(jd_content, resume_content, contact_name, conta
     {resume_content}
     """
 
+def create_combined_prompt(jd_content, resume_content, contact_name, contact_role, personal_note=None, fit_note=None, message_type='role_specific', specific_hook=None):
+    """Creates a single prompt to generate everything at once."""
+    
+    outreach_instructions = ""
+    if contact_name and contact_role:
+        
+        # Build the shared context
+        shared_context = ""
+        if personal_note: shared_context += f'Personal Note: "{personal_note}"\n'
+        if fit_note: shared_context += f'Fit Note: "{fit_note}"\n'
+        if specific_hook: shared_context += f'Specific Hook/Research: "{specific_hook}"\n'
+
+        # Select strategy instruction
+        strategy_instruction = ""
+        if message_type == 'exploratory':
+            strategy_instruction = """
+            - TYPE: Exploratory / Networking Code (NOT a job application).
+            - GOAL: Ask for a 10-min virtual coffee to ask 1-2 specific questions and learn from them.
+            - DO NOT ask for a referral. 
+            - Use the "Specific Hook" to explain why you want to talk to THEM specifically.
+            """
+        else: # role_specific
+            strategy_instruction = """
+            - TYPE: Role-Specific Application.
+            - GOAL: Express interest in the open role and ask for a brief chat to learn about their team's challenges.
+            - Use the "Fit Note" to connect a key skill to their problem.
+            - Use the "Specific Hook" if provided to show you did research.
+            """
+
+        outreach_instructions = f"""
+        2. "outreach_email": A short connection request/email to {contact_name} ({contact_role}).
+           - STRICT LIMIT: Must be under 300 characters.
+           - TONE: Warm, genuine, human. NO generic fluff like "I hope this finds you well".
+           - CONTEXT:
+             {shared_context}
+           - STRATEGY:
+             {strategy_instruction}
+        """
+    else:
+        outreach_instructions = '2. "outreach_email": null (Return null as no contact info provided)'
+
+    return f"""
+    Act as an expert career coach. Analyze the provided RESUME and JOB DESCRIPTION.
+    Generate a JSON object with the following keys:
+    
+    1. "company_name": The name of the company from the job description. 
+       - If not found, use "Company".
+    
+    {outreach_instructions}
+
+    3. "cover_letter": A professional, 3-paragraph cover letter.
+       - Paragraph 1: State position and enthusiasm.
+       - Paragraph 2: Highlight 2-3 key experiences from resume aligning with JD.
+       - Paragraph 3: Reiterate interest and call to action.
+       - IMPORTANT: Do not make up facts. Omit missing details.
+
+    Output must be valid JSON only. Do not wrap in markdown code blocks.
+
+    --- JOB DESCRIPTION ---
+    {jd_content}
+
+    --- RESUME ---
+    {resume_content}
+    """
+
 # --- Core Logic Function (Reusable) ---
-def process_application(job_desc, resume, contact_name, contact_role, personal_note, fit_note, output_dir):
+def process_application(job_desc, resume, contact_name, contact_role, personal_note=None, fit_note=None, output_dir='output', message_type='role_specific', specific_hook=None):
     """
     Core logic to process the application generation.
     Returns a dictionary with paths to generated files and content.
     """
     jd_content = fetch_job_description(job_desc)
     
-    # Handle resume input (file path or direct content)
-    # If it looks like a file path and exists, read it. Otherwise treat as content.
+    # Handle resume input...
     resume_content = ""
     try:
         if os.path.exists(resume):
@@ -144,32 +210,41 @@ def process_application(job_desc, resume, contact_name, contact_role, personal_n
         else:
              resume_content = resume
     except OSError:
-        # If it's too long to be a filename or invalid path, treat as content
         resume_content = resume
 
-    print("🧠 Generating Cover Letter...")
-    cover_letter_prompt = create_cover_letter_prompt(jd_content, resume_content)
-    cover_letter_text = generate_content(cover_letter_prompt)
+    print("🧠 Generating Application Packet (Single API Call)...")
+    combined_prompt = create_combined_prompt(jd_content, resume_content, contact_name, contact_role, personal_note, fit_note, message_type, specific_hook)
+    response_text = generate_content(combined_prompt)
     
-    # Extract company name for filename
-    company_name = extract_company_name(jd_content)
+    # Parse JSON (handle potential markdown wrapping)
+    try:
+        # Strip ```json ... ``` if present
+        clean_json = response_text.replace("```json", "").replace("```", "").strip()
+        data = json.loads(clean_json)
+    except json.JSONDecodeError:
+        # Fallback to simple split or just returning error if it fails badly
+        # But let's try to survive partial failure
+        print("⚠️ Failed to parse JSON response. Raw response:\n", response_text)
+        return {
+            "cover_letter_text": "Error generating content. Please try again.",
+            "outreach_email_text": "",
+            "cover_letter_path": "",
+            "outreach_email_path": None,
+            "company_name": "Error"
+        }
+
+    company_name = data.get("company_name", "Company")
+    cover_letter_text = data.get("cover_letter", "")
+    outreach_email_text = data.get("outreach_email", "")
+
     # Sanitize filename
     safe_company_name = "".join([c for c in company_name if c.isalnum() or c in ('_', '-')]).strip()
-    # TRUNCATE to avoid "File name too long" errors if AI hallucinates or returns error text
     safe_company_name = safe_company_name[:50] 
-    
-    if not safe_company_name:
-        safe_company_name = "Company"
+    if not safe_company_name: safe_company_name = "Company"
         
     print(f"🏢 Identified Company: {safe_company_name}")
-
-    outreach_email_text = ""
-    if contact_name and contact_role:
-           print(f"🧠 Generating Outreach Email for {contact_name}...")
-           outreach_email_prompt = create_outreach_email_prompt(jd_content, resume_content, contact_name, contact_role, personal_note, fit_note)
-           outreach_email_text = generate_content(outreach_email_prompt)
-   
     print("💾 Saving generated files...")
+    
     output_path = pathlib.Path(output_dir)
     output_path.mkdir(exist_ok=True)
    
@@ -208,7 +283,9 @@ def cli():
 @click.option('--personal-note', '-p', help='A personal note to include in the outreach email.')
 @click.option('--fit-note', '-f', help='A specific sentence about why you are a good fit.')
 @click.option('--output-dir', '-o', default='output', help='Directory to save the generated files.')
-def create_packet(job_desc, resume, contact_name, contact_role, personal_note, fit_note, output_dir):
+@click.option('--message-type', default='role_specific', type=click.Choice(['role_specific', 'exploratory']), help='Type of outreach message.')
+@click.option('--specific-hook', help='Specific research or hook for the outreach message.')
+def create_packet(job_desc, resume, contact_name, contact_role, personal_note, fit_note, output_dir, message_type, specific_hook):
     """
     Generates a complete job application packet.
     """
@@ -227,7 +304,7 @@ def create_packet(job_desc, resume, contact_name, contact_role, personal_note, f
              resume = click.prompt("Please enter the resume file path", type=click.Path(exists=True, dir_okay=False))
 
         # Call the core logic
-        process_application(job_desc, resume, contact_name, contact_role, personal_note, fit_note, output_dir)
+        process_application(job_desc, resume, contact_name, contact_role, personal_note, fit_note, output_dir, message_type, specific_hook)
         
         click.echo("✅ Successfully saved all files.")
         click.echo("\n🎉 Job application packet created successfully! 🎉")
