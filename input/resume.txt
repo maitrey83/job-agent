@@ -1,0 +1,98 @@
+Maitrey Patel 
+Murray, Utah | (408) 784-5743 | maitrey.qa@gmail.com |LinkedIn 
+
+ProfileShape 
+
+Accomplished Senior Software Development Engineer in Test with 10+ years of experience architecting and implementing robust automation and performance testing frameworks. Proven success in delivering high-quality software by leading testing strategy, streamlining CI/CD pipelines, and driving business value in agile environments. 
+
+Expert in validating complex business services across the full stack, from API and data layers to front-end UI. Adept at mentoring QA teams, championing engineering best practices, and collaborating across diverse domains to enhance code quality, system scalability, and deployment velocity. 
+
+Career HighlightsShape 
+
+Designed and delivered an internal Java-based decision-support engine that synthesized behavioral and system signals to enable real-time, shift-left risk detection and faster decision-making for customer service agents. 
+
+Accelerated agent decision cycles and improved sales effectiveness by translating complex system states into actionable guidance, reducing reliance on manual investigation and tribal knowledge. 
+
+Drove a 20% revenue growth and improved Google organic search visibility by 27% at Overstock.com by executing end-to-end testing for a mission-critical CMS project. 
+
+Enabled a 30% increase in deployment frequency by embedding automation and quality gates directly into CI/CD pipelines across teams. 
+
+Improved system scalability by 25% and achieved a site-wide throughput of 90 orders/sec by developing a high-traffic performance testing framework using JMeter. 
+
+Reduced manual testing efforts by 40% at two separate companies (Ancestry and Overstock) by designing and implementing comprehensive UI and SEO automation frameworks. 
+
+Enhanced test execution efficiency by 20% by leading and mentoring a team of 3 QA engineers and fostering best practices for API and UI testing. 
+
+Selected ExperienceShape 
+
+Sr. Software Developer in Test | Ancestry.com, Inc | Lehi, UT | October 2016 – Present 
+
+Architected and owned the end-to-end testing strategy for API, UI, and performance validation across key business services, including Salesforce Service Cloud. 
+
+Acted as a technical quality leader, driving a shift-left testing strategy by influencing design decisions early in the SDLC to prevent systemic defects rather than detecting them late. 
+
+Led Agile ceremonies as Scrum Master, facilitating sprint planning, daily stand-ups, and retrospectives to ensure seamless execution and team alignment. 
+
+Championed engineering excellence by spearheading code reviews and mentoring junior engineers to foster best practices and improve overall code quality. 
+
+ 
+
+Key Achievements: 
+
+Accelerated agent decision cycles and contributed to increased sales conversion by translating complex system states into actionable guidance. 
+
+Designed and scaled an API quality framework with 200+ integration tests, achieving 98% coverage and enabling early detection of service-level risks across releases. 
+
+Built a UI and regression automation platform covering critical user flows, increasing coverage to 95%, and reducing manual validation effort by 40%. 
+
+Architected a performance and scalability validation framework using JMeter, validating 90 orders/sec throughput and improving system scalability by 25%. 
+
+Led cross-team code reviews focused on testability, resiliency, and long-term maintainability, contributing to 95% code coverage and higher engineering standards. 
+
+ 
+
+Software Developer in Test | Overstock.com, Inc | Midvale, UT | July 2013 – October 2016 
+
+ 
+
+Executed comprehensive testing strategies for mission-critical e-commerce systems, including the Content Management System (CMS) and Order Processed Experience Question (OPEQ). 
+
+Designed and implemented robust test automation frameworks for front-end, regression, and SEO testing to ensure product quality and performance. 
+
+Owned the validation of data integrity for new features, verifying complex SQL scripts to ensure accuracy during deployment cycles. 
+
+Key Achievements: 
+
+Led end-to-end quality ownership for a CMS platform, improving organic search visibility by 27% and contributing to 20% revenue growth. 
+
+Ensured reliability and data integrity of a customer feedback platform, driving a 20% increase in user-generated content through improved system stability. 
+
+Built a scalable front-end automation framework that increased regression coverage by 65% and reduced manual testing by 40%. 
+
+Owned data quality validation for deployments by reviewing and validating 100+ DDL/DML scripts, ensuring zero data integrity regressions. 
+
+ 
+
+Quality Engineer | Radiss Tech Services, Inc.  | Rolling Meadows, IL | November 2010 – July 2013 
+
+Conducted API testing as the sole tester, enhancing website performance for risk management systems by 20%. 
+
+Trained and onboarded 10+ QA team members, standardizing QA testing processes and improving team productivity by 25%. 
+
+Education 
+
+M.S in Industrial and Systems Engineering, Dekalb, Illinois				2008-2010 
+
+B.E in Mechatronics Engineering, Gujarat, India						2001-2005 
+
+Tools & TechnologiesShape 
+
+Automated Testing Tools: Selenium, Jmeter, Playwright, Cypress, Postman, Blazemeter, Taurus 
+
+Defect Tracking Tools: Agile Central, Target Process, JIRA, Clears Quest, Bugzilla 
+
+Programming Languages:  Java, Python, JavaScript, SQL, PL/SQL, HTML, XML 
+
+Development Tools: IntelliJ, Eclipse, Visual Studio 
+
+Database: Oracle, Posgres, Microsoft SQL Server, SQL Plus, iSeries Navigator 

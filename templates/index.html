@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Application Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Job Application Agent</h1>
+            <p>Automate your job search with AI-powered cover letters and outreach emails.</p>
+        </header>
+
+        <main>
+            <form action="/" method="POST" enctype="multipart/form-data">
+
+                <section class="section-card">
+                    <h2><span class="step-number">1</span> Job Details</h2>
+                    <div class="form-group">
+                        <label for="job_desc">Job Description (URL or Text)</label>
+                        <textarea id="job_desc" name="job_desc" rows="5"
+                            placeholder="Paste the job description text here, or simply paste the URL to the job posting..."
+                            required></textarea>
+                    </div>
+                </section>
+
+                <section class="section-card">
+                    <h2><span class="step-number">2</span> Your Resume</h2>
+                    <div class="tags-input-container">
+                        <div class="tag-choice">
+                            <input type="radio" id="resume_paste" name="resume_choice" value="paste" checked
+                                onclick="toggleResumeInput('paste')">
+                            <label for="resume_paste">Paste Text</label>
+                        </div>
+                        <div class="tag-choice">
+                            <input type="radio" id="resume_upload" name="resume_choice" value="upload"
+                                onclick="toggleResumeInput('upload')">
+                            <label for="resume_upload">Upload File</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="resume_text_group">
+                        <label for="resume_content">Resume Content</label>
+                        <textarea id="resume_content" name="resume_content" rows="5"
+                            placeholder="Paste your resume text here..."></textarea>
+                    </div>
+
+                    <div class="form-group hidden" id="resume_file_group">
+                        <label for="resume_file">Upload Resume (.pdf, .docx, .txt)</label>
+                        <input type="file" id="resume_file" name="resume_file" accept=".pdf,.docx,.txt">
+                    </div>
+                </section>
+
+                <section class="section-card">
+                    <h2><span class="step-number">3</span> Personalize</h2>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="contact_name">Contact Name (Optional)</label>
+                            <input type="text" id="contact_name" name="contact_name" placeholder="e.g. Jane Doe">
+                        </div>
+                        <div class="form-group">
+                            <label for="contact_role">Contact Role (Optional)</label>
+                            <input type="text" id="contact_role" name="contact_role" placeholder="e.g. Hiring Manager">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="personal_note">Personal Note (Optional)</label>
+                        <textarea id="personal_note" name="personal_note" rows="2"
+                            placeholder="e.g. I saw your talk at PyCon..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fit_note">Why are you a good fit? (Optional)</label>
+                        <textarea id="fit_note" name="fit_note" rows="2"
+                            placeholder="e.g. I have 5 years of experience with Python..."></textarea>
+                    </div>
+                </section>
+
+                <div class="actions">
+                    <button type="submit" class="btn-primary">Generate Packet ✨</button>
+                </div>
+            </form>
+        </main>
+    </div>
+
+    <script>
+        function toggleResumeInput(type) {
+            const textGroup = document.getElementById('resume_text_group');
+            const fileGroup = document.getElementById('resume_file_group');
+
+            if (type === 'paste') {
+                textGroup.classList.remove('hidden');
+                fileGroup.classList.add('hidden');
+            } else {
+                textGroup.classList.add('hidden');
+                fileGroup.classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+
+</html>

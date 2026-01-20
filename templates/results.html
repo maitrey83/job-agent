@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Application Packet - Job Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Application Ready! 🎉</h1>
+            <p>Here are your tailored documents. Review, edit, and send.</p>
+        </header>
+
+        <main>
+            <div class="results-actions">
+                <a href="/" class="btn-secondary">← Create Another</a>
+                <a href="{{ pdf_link }}" class="btn-primary">Download PDF 📄</a>
+            </div>
+
+            <section class="result-card">
+                <div class="card-header">
+                    <h2>Cover Letter</h2>
+                    <button class="btn-icon" onclick="copyToClipboard('cover_letter_text')">Copy</button>
+                </div>
+                <div class="card-content">
+                    <pre id="cover_letter_text">{{ cover_letter }}</pre>
+                </div>
+            </section>
+
+            {% if email %}
+            <section class="result-card">
+                <div class="card-header">
+                    <h2>Outreach Email</h2>
+                    <button class="btn-icon" onclick="copyToClipboard('email_text')">Copy</button>
+                </div>
+                <div class="card-content">
+                    <pre id="email_text">{{ email }}</pre>
+                </div>
+            </section>
+            {% endif %}
+        </main>
+    </div>
+
+    <script>
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId).innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+    </script>
+</body>
+
+</html>

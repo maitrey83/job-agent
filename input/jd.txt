@@ -1,0 +1,43 @@
+pandora
+
+Senior Staff Quality Engineer
+How You’ll Make An Impact
+
+The Staff Quality Engineer is a senior technical leader responsible for defining, implementing, and scaling test frameworks, automation strategies, and quality engineering best practices across multiple product domains. This role oversees complex quality initiatives, mentors other engineers, and influences decisions that shape the overall QE strategy for SiriusXM’s media platforms.
+
+The ideal candidate brings deep technical expertise, strong leadership, and a proven record of building scalable test frameworks, improving quality processes, and driving innovation in automation, performance, and CI/CD systems.
+
+What You’ll Do
+
+Lead Quality Engineering across multiple projects, overseeing framework design, automation strategy, and execution.
+Architect, develop, and maintain scalable testing frameworks (UI, API, and backend) using Playwright, Selenium, and REST Assured.
+Drive quality governance and standardization of automation practices across teams.
+Review and approve QE code contributions, providing technical feedback on design, extensibility, and maintainability.
+Lead performance and reliability testing, developing frameworks to measure key performance metrics and identify bottlenecks
+Collaborate cross-functionally with Product, Development, and DevOps to define and implement comprehensive testing strategies.
+Analyze test results and system performance; use data to drive process improvements and product optimizations.
+Act as a QE subject matter expert in architectural discussions and major technical initiatives
+Contribute to building and maintaining CI/CD pipelines (GitLab, Jenkins), optimizing build efficiency and test integration.
+Mentor and guide QE engineers, elevating technical maturity and quality culture across teams.
+Stay informed on emerging testing tools, frameworks, and methodologies, and lead the adoption of those that improve efficiency and scalability.
+
+What You’ll Need
+
+Minimum Qualifications
+
+Bachelor’s or Master’s degree in Computer Science, Software Engineering, or related field.
+8+ years of experience in Quality Engineering or Software Development in Test.
+Expertise in automation framework design and architecture (Playwright, Selenium, REST Assured, or equivalent).
+Strong programming skills in Java.
+Experience with performance testing, API test automation, and CI/CD integration (GitLab, Jenkins).
+Proficiency in cloud-based testing environments (AWS, GCP).
+Experience with Docker/Kubernetes, SQL, and NoSQL databases.
+Strong problem-solving, analytical, and communication skills.
+Demonstrated leadership in driving process improvements, mentoring engineers, and influencing technical direction.
+
+Preferred Skills And Experience
+
+Experience with Ads and Media domain systems.
+Experience leading cross-functional QE initiatives in large-scale distributed environments
+Familiarity with data pipelines and service monitoring tools
+Test data management, performance benchmarking, and cloud-native QA solutions.
