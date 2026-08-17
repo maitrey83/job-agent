@@ -21,13 +21,22 @@ except Exception as e:
     model = None
 
 # --- Helper function to call the Gemini API ---
-def generate_content(prompt):
-    """Sends a prompt to the Gemini API and returns the response."""
+def generate_content(prompt, json_mode=False):
+    """Sends a prompt to the Gemini API and returns the response.
+
+    json_mode=True sets response_mime_type to force Gemini to emit valid JSON
+    directly, rather than relying on prompt instructions ("Output must be
+    valid JSON only") that it can still deviate from - found via a real
+    Applier-Engine run where json.loads() failed on a large/noisy scraped job
+    description, silently degrading to the 0.0 fit_score error fallback in
+    process_application() and causing a job to look like a genuine low-fit
+    skip when it was actually an unparseable-response failure.
+    """
     if not model:
         return "AI model is not configured. Please check your API key."
     try:
-        # Standard model.generate_content call
-        response = model.generate_content(prompt)
+        generation_config = {"response_mime_type": "application/json"} if json_mode else None
+        response = model.generate_content(prompt, generation_config=generation_config)
         return response.text
     except Exception as e:
         return f"An error occurred while generating content: {e}"
@@ -246,7 +255,7 @@ def process_application(job_desc, resume, contact_name, contact_role, personal_n
 
     print("🧠 Generating Application Packet (Single API Call)...")
     combined_prompt = create_combined_prompt(jd_content, resume_content, contact_name, contact_role, personal_note, fit_note, message_type, specific_hook, questions)
-    response_text = generate_content(combined_prompt)
+    response_text = generate_content(combined_prompt, json_mode=True)
     
     # Parse JSON (handle potential markdown wrapping)
     try:
