@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, send_file, redirect, url_for
+from flask import Flask, render_template, request, send_file, redirect, url_for, jsonify
 import os
 from agent import process_application
 from fpdf import FPDF
@@ -12,6 +12,13 @@ app = Flask(__name__)
 # Ideally we switch to memory buffers for cloud
 app.config['OUTPUT_FOLDER'] = 'output'
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
+
+# Optional shared-secret for the programmatic API below. Set APPLIER_API_KEY
+# in .env (locally) / Render's environment variables (deployed) to require
+# callers to send it back as the X-API-Key header. If unset, the endpoint is
+# open - fine for quick local testing, not recommended once this is deployed
+# publicly, since every call spends your Gemini quota.
+API_KEY = os.environ.get('APPLIER_API_KEY')
 
 class PDF(FPDF):
     def header(self):
@@ -100,11 +107,14 @@ def index():
         resume_content = request.form.get('resume_content')
         contact_name = request.form.get('contact_name')
         contact_role = request.form.get('contact_role')
-        contact_role = request.form.get('contact_role')
         personal_note = request.form.get('personal_note')
         fit_note = request.form.get('fit_note')
         message_type = request.form.get('message_type', 'role_specific')
         specific_hook = request.form.get('specific_hook')
+        raw_questions = request.form.get('application_questions', '')
+        
+        # Split questions by newline and filter out empty lines
+        questions = [q.strip() for q in raw_questions.split('\n') if q.strip()]
         
         # If file provided, read it? For now, let's assume text paste for resume to be simple
         # Or if "resume_file" in request.files...
@@ -123,6 +133,7 @@ def index():
                 fit_note=fit_note,
                 message_type=message_type,
                 specific_hook=specific_hook,
+                questions=questions,
                 output_dir=app.config['OUTPUT_FOLDER']
             )
             
@@ -135,15 +146,6 @@ def index():
             
             pdf_filename = f'cover_letter_{safe_name}.pdf'
             
-            # STORE IN MEMORY for the session/request - simplified:
-            # We will render the template, but the download link needs to trigger generation 
-            # OR we temporarily save to /tmp (easier for Flask send_file)
-            
-            # STATELSS APPROACH:
-            # We'll save the text in a hidden field in the results page or re-generate on download?
-            # Re-generating on download is safer for stateless but slower.
-            # Storing in /tmp is fine for ephemeral containers.
-            
             import tempfile
             tmp_dir = tempfile.gettempdir()
             pdf_path = os.path.join(tmp_dir, pdf_filename)
@@ -153,17 +155,10 @@ def index():
             with open(pdf_path, 'wb') as f:
                 f.write(pdf_buffer.getbuffer())
             
-            # We also need a way to serve it. 
-            # In a real production app we'd upload to S3.
-            # For this simple app, we'll serve from /tmp but warn it might expire.
-            # A better UX: Encode PDF as Base64 and embed in the download button? 
-            # Or just use the /download route with the filename and hope it's still there (sticky sessions).
-            
-            # Let's stick to /tmp for now, it's robust enough for single-instance free tier.
-            
             return render_template('results.html', 
                                    cover_letter=results['cover_letter_text'],
                                    email=results['outreach_email_text'],
+                                   question_answers=results['question_answers'],
                                    pdf_link=f'/download_tmp/{pdf_filename}')
                                    
         except Exception as e:
@@ -176,6 +171,62 @@ def download_tmp(filename):
     import tempfile
     tmp_dir = tempfile.gettempdir()
     return send_file(os.path.join(tmp_dir, filename), as_attachment=True)
+
+
+@app.route('/api/generate-packet', methods=['POST'])
+def api_generate_packet():
+    """
+    JSON API used by Applier-Engine (src/ai/jobAgentClient.ts) to get a
+    tailored cover letter, a JD-vs-resume fit score, and answers to any
+    screening questions the form-filler couldn't resolve on its own.
+
+    Request body:
+      {
+        "jobDescription": "...",       # required - raw JD text (Applier-Engine scrapes this from the page)
+        "resumeText": "...",           # required - plain-text resume
+        "unmappedQuestions": ["..."]   # optional - question labels Applier-Engine's form-filler couldn't map
+      }
+
+    Response body:
+      {
+        "companyName": "...",
+        "coverLetter": "...",
+        "fitScore": 0.0-1.0,
+        "questionAnswers": [{"question": "...", "answer": "...", "confidence": 0.0-1.0}, ...]
+      }
+    """
+    if API_KEY:
+        provided_key = request.headers.get('X-API-Key')
+        if provided_key != API_KEY:
+            return jsonify({"error": "Unauthorized"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    job_description = (payload.get('jobDescription') or '').strip()
+    resume_text = (payload.get('resumeText') or '').strip()
+    unmapped_questions = payload.get('unmappedQuestions') or []
+
+    if not job_description or not resume_text:
+        return jsonify({"error": "jobDescription and resumeText are both required"}), 400
+
+    try:
+        results = process_application(
+            job_desc=job_description,
+            resume=resume_text,
+            contact_name=None,
+            contact_role=None,
+            questions=unmapped_questions,
+            output_dir=app.config['OUTPUT_FOLDER'],
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({
+        "companyName": results.get('company_name', 'Company'),
+        "coverLetter": results.get('cover_letter_text', ''),
+        "fitScore": results.get('fit_score', 0.5),
+        "questionAnswers": results.get('question_answers_detailed', []),
+    })
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=8000)

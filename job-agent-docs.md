@@ -1,5 +1,38 @@
 # Job Application Agent Documentation
 
+## 0. Programmatic API (used by Applier-Engine)
+
+In addition to the web UI and CLI below, `app.py` exposes
+`POST /api/generate-packet` for other programs to call directly - this is
+how [Applier-Engine](https://github.com/maitrey83) (the Playwright form-filler)
+gets tailored content. Request/response shape:
+
+```
+POST /api/generate-packet
+{
+  "jobDescription": "...",        // required
+  "resumeText": "...",            // required
+  "unmappedQuestions": ["..."]    // optional - labels/questions to answer
+}
+->
+{
+  "companyName": "...",
+  "coverLetter": "...",
+  "fitScore": 0.0-1.0,
+  "questionAnswers": [{"question": "...", "answer": "...", "confidence": 0.0-1.0}]
+}
+```
+
+If `APPLIER_API_KEY` is set in the environment, callers must send it back as
+the `X-API-Key` header or the request is rejected with 401. Set this once
+this is deployed publicly - an open endpoint spends your Gemini quota on
+whoever finds the URL.
+
+Gemini's `fit_score` and per-answer `confidence` are self-reported estimates
+(see the prompt in `create_combined_prompt` in `agent.py`) - they're what
+Applier-Engine uses to decide whether to bother applying at all, and whether
+to trust an answer enough to submit without a human looking at it first.
+
 ## 1. Overview
 
 The Job Application Agent is a command-line interface (CLI) tool designed to streamline the job application process. It leverages the Google Gemini AI model to automatically generate professional and tailored job application materials.

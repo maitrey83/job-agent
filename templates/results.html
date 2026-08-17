@@ -44,6 +44,23 @@
                 </div>
             </section>
             {% endif %}
+
+            {% if question_answers %}
+            <header style="margin-top: 2rem;">
+                <h1>Application Questions</h1>
+            </header>
+            {% for question, answer in question_answers.items() %}
+            <section class="result-card">
+                <div class="card-header">
+                    <h2 style="font-size: 1rem; color: #64748b;">{{ question }}</h2>
+                    <button class="btn-icon" onclick="copyToClipboard('answer_{{ loop.index }}')">Copy</button>
+                </div>
+                <div class="card-content">
+                    <pre id="answer_{{ loop.index }}">{{ answer }}</pre>
+                </div>
+            </section>
+            {% endfor %}
+            {% endif %}
         </main>
     </div>
 

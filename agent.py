@@ -26,6 +26,7 @@ def generate_content(prompt):
     if not model:
         return "AI model is not configured. Please check your API key."
     try:
+        # Standard model.generate_content call
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
@@ -47,11 +48,19 @@ def fetch_job_description(input_source):
         except Exception as e:
             raise click.ClickException(f"Error fetching URL: {e}")
     else:
-        # Assume it's a file path
+        # Assume it's a file path unless it looks like a long text blob
         try:
-            return pathlib.Path(input_source).read_text()
-        except Exception as e:
-             raise click.ClickException(f"Error reading file {input_source}: {e}")
+            if "\n" in input_source or len(input_source) > 255:
+                # Direct text input
+                return input_source
+            
+            path = pathlib.Path(input_source)
+            if path.exists() and path.is_file():
+                return path.read_text()
+            
+            return input_source
+        except Exception:
+             return input_source
 
 # --- New: Helper functions to create specific prompts ---
 def create_cover_letter_prompt(jd_content, resume_content):
@@ -62,7 +71,7 @@ def create_cover_letter_prompt(jd_content, resume_content):
     - Paragraph 1: State the position being applied for and express enthusiasm for the company and role.
     - Paragraph 2: Highlight 2-3 key experiences from the resume that directly align with the most important
       responsibilities in the job description. Connect the candidate's skills to the company's needs.
-    - Paragraph 3: Reiterate interest and include a clear call to action (e.g., "I am eager to discuss...").
+    - Paragraph 3: Reiterate interest and include a call to action (e.g., "I am eager to discuss...").
     
     IMPORTANT: if details (like company address, hiring manager name, or specific numbers) are not present in the
     job description, do NOT make them up. Omit them entirely.
@@ -129,7 +138,7 @@ def create_outreach_email_prompt(jd_content, resume_content, contact_name, conta
     {resume_content}
     """
 
-def create_combined_prompt(jd_content, resume_content, contact_name, contact_role, personal_note=None, fit_note=None, message_type='role_specific', specific_hook=None):
+def create_combined_prompt(jd_content, resume_content, contact_name, contact_role, personal_note=None, fit_note=None, message_type='role_specific', specific_hook=None, questions=None):
     """Creates a single prompt to generate everything at once."""
     
     outreach_instructions = ""
@@ -170,20 +179,42 @@ def create_combined_prompt(jd_content, resume_content, contact_name, contact_rol
     else:
         outreach_instructions = '2. "outreach_email": null (Return null as no contact info provided)'
 
+    questions_instruction = ""
+    if questions:
+        formatted_questions = "\n".join([f"- {q}" for q in questions])
+        questions_instruction = f"""
+    5. "question_answers": A JSON ARRAY (not an object) with one entry per question below:
+       [{{"question": "<the exact question text>", "answer": "<tailored answer>", "confidence": <0.0-1.0>}}, ...]
+       - QUESTIONS TO ANSWER:
+{formatted_questions}
+       - INSTRUCTIONS: Answer each question by identifying the most relevant experiences from the RESUME that demonstrate the skills or qualifications requested in the JOB DESCRIPTION. Ensure the tone is professional and the answers are concise (under 150 words each unless specified).
+       - "confidence": your honest self-assessment (0.0-1.0) of how well-supported this answer is by the actual RESUME content. Use a LOW confidence (below 0.5) when you had to generalize, guess, or the resume has little directly relevant evidence for this question - don't inflate it. This number is used to decide whether a human should review the answer before it's submitted anywhere, so it must be a genuine estimate, not a default.
+    """
+
     return f"""
     Act as an expert career coach. Analyze the provided RESUME and JOB DESCRIPTION.
     Generate a JSON object with the following keys:
-    
-    1. "company_name": The name of the company from the job description. 
+
+    1. "company_name": The name of the company from the job description.
        - If not found, use "Company".
-    
+
+    2. "fit_score": A number from 0.0 to 1.0 representing how well this candidate's RESUME
+       matches the JOB DESCRIPTION's requirements (skills, experience level, domain).
+       - Be a realistic, discriminating judge - most candidates are NOT a 0.9+ fit. Reserve
+         0.8+ for a strong, direct match on the core requirements; use 0.4-0.6 for a partial
+         match with real gaps; use below 0.3 when core requirements are clearly unmet.
+       - This score is used to decide whether to spend an application on this job at all,
+         so err toward an honest, slightly conservative number rather than an optimistic one.
+
     {outreach_instructions}
 
-    3. "cover_letter": A professional, 3-paragraph cover letter.
+    4. "cover_letter": A professional, 3-paragraph cover letter.
        - Paragraph 1: State position and enthusiasm.
        - Paragraph 2: Highlight 2-3 key experiences from resume aligning with JD.
        - Paragraph 3: Reiterate interest and call to action.
        - IMPORTANT: Do not make up facts. Omit missing details.
+
+    {questions_instruction}
 
     Output must be valid JSON only. Do not wrap in markdown code blocks.
 
@@ -195,7 +226,7 @@ def create_combined_prompt(jd_content, resume_content, contact_name, contact_rol
     """
 
 # --- Core Logic Function (Reusable) ---
-def process_application(job_desc, resume, contact_name, contact_role, personal_note=None, fit_note=None, output_dir='output', message_type='role_specific', specific_hook=None):
+def process_application(job_desc, resume, contact_name, contact_role, personal_note=None, fit_note=None, output_dir='output', message_type='role_specific', specific_hook=None, questions=None):
     """
     Core logic to process the application generation.
     Returns a dictionary with paths to generated files and content.
@@ -213,7 +244,7 @@ def process_application(job_desc, resume, contact_name, contact_role, personal_n
         resume_content = resume
 
     print("🧠 Generating Application Packet (Single API Call)...")
-    combined_prompt = create_combined_prompt(jd_content, resume_content, contact_name, contact_role, personal_note, fit_note, message_type, specific_hook)
+    combined_prompt = create_combined_prompt(jd_content, resume_content, contact_name, contact_role, personal_note, fit_note, message_type, specific_hook, questions)
     response_text = generate_content(combined_prompt)
     
     # Parse JSON (handle potential markdown wrapping)
@@ -228,6 +259,9 @@ def process_application(job_desc, resume, contact_name, contact_role, personal_n
         return {
             "cover_letter_text": "Error generating content. Please try again.",
             "outreach_email_text": "",
+            "question_answers": {},
+            "question_answers_detailed": [],
+            "fit_score": 0.0,
             "cover_letter_path": "",
             "outreach_email_path": None,
             "company_name": "Error"
@@ -236,6 +270,39 @@ def process_application(job_desc, resume, contact_name, contact_role, personal_n
     company_name = data.get("company_name", "Company")
     cover_letter_text = data.get("cover_letter", "")
     outreach_email_text = data.get("outreach_email", "")
+    fit_score = data.get("fit_score", 0.5)
+    try:
+        fit_score = max(0.0, min(1.0, float(fit_score)))
+    except (TypeError, ValueError):
+        fit_score = 0.5
+
+    # question_answers now comes back from Gemini as a list of
+    # {question, answer, confidence} objects (see create_combined_prompt).
+    # Normalize defensively in case the model returns the old dict shape or
+    # omits confidence, and also build a plain {question: answer} dict for
+    # backward compatibility with the HTML template / older callers.
+    raw_qa = data.get("question_answers", [])
+    question_answers_detailed = []
+    if isinstance(raw_qa, list):
+        for item in raw_qa:
+            if not isinstance(item, dict):
+                continue
+            confidence = item.get("confidence", 0.5)
+            try:
+                confidence = max(0.0, min(1.0, float(confidence)))
+            except (TypeError, ValueError):
+                confidence = 0.5
+            question_answers_detailed.append({
+                "question": item.get("question", ""),
+                "answer": item.get("answer", ""),
+                "confidence": confidence,
+            })
+    elif isinstance(raw_qa, dict):
+        # Defensive fallback if the model ignores the new format.
+        for q, a in raw_qa.items():
+            question_answers_detailed.append({"question": q, "answer": a, "confidence": 0.5})
+
+    question_answers = {qa["question"]: qa["answer"] for qa in question_answers_detailed}
 
     # Sanitize filename
     safe_company_name = "".join([c for c in company_name if c.isalnum() or c in ('_', '-')]).strip()
@@ -262,6 +329,9 @@ def process_application(job_desc, resume, contact_name, contact_role, personal_n
     return {
         "cover_letter_text": cover_letter_text,
         "outreach_email_text": outreach_email_text,
+        "question_answers": question_answers,
+        "question_answers_detailed": question_answers_detailed,
+        "fit_score": fit_score,
         "cover_letter_path": str(cover_letter_path),
         "outreach_email_path": str(outreach_email_path) if outreach_email_path else None,
         "company_name": safe_company_name
