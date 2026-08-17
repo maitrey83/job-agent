@@ -189,6 +189,7 @@ def create_combined_prompt(jd_content, resume_content, contact_name, contact_rol
 {formatted_questions}
        - INSTRUCTIONS: Answer each question by identifying the most relevant experiences from the RESUME that demonstrate the skills or qualifications requested in the JOB DESCRIPTION. Ensure the tone is professional and the answers are concise (under 150 words each unless specified).
        - "confidence": your honest self-assessment (0.0-1.0) of how well-supported this answer is by the actual RESUME content. Use a LOW confidence (below 0.5) when you had to generalize, guess, or the resume has little directly relevant evidence for this question - don't inflate it. This number is used to decide whether a human should review the answer before it's submitted anywhere, so it must be a genuine estimate, not a default.
+       - IMPORTANT: these answers get typed directly into real form fields on a real job application - never write meta-commentary about the resume (e.g. "Not specified on the resume", "The resume does not mention this"). If a question asks for a specific piece of data (a URL, a number, a date, a yes/no) that the RESUME simply doesn't contain, return "" (empty string) as the answer with confidence 0.0, rather than a sentence explaining its absence.
     """
 
     return f"""
