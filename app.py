@@ -6,6 +6,7 @@ import pathlib
 from pypdf import PdfReader
 from docx import Document
 import io
+import base64
 
 app = Flask(__name__)
 # Output folder is less relevant for cloud, but we'll keep it for local consistency
@@ -191,6 +192,7 @@ def api_generate_packet():
       {
         "companyName": "...",
         "coverLetter": "...",
+        "coverLetterPdfBase64": "...",  # base64-encoded PDF of coverLetter, for ATS forms that need a file upload rather than a text field
         "fitScore": 0.0-1.0,
         "questionAnswers": [{"question": "...", "answer": "...", "confidence": 0.0-1.0}, ...]
       }
@@ -220,9 +222,22 @@ def api_generate_packet():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+    cover_letter_text = results.get('cover_letter_text', '')
+    cover_letter_pdf_base64 = ''
+    if cover_letter_text:
+        try:
+            pdf_buffer = generate_pdf(cover_letter_text)
+            cover_letter_pdf_base64 = base64.b64encode(pdf_buffer.getvalue()).decode('ascii')
+        except Exception:
+            # A PDF-generation hiccup shouldn't fail the whole packet - Applier-Engine
+            # already handles an empty coverLetterPdfBase64 by skipping file-upload
+            # cover letter fields (falls back to leaving them for manual entry).
+            cover_letter_pdf_base64 = ''
+
     return jsonify({
         "companyName": results.get('company_name', 'Company'),
-        "coverLetter": results.get('cover_letter_text', ''),
+        "coverLetter": cover_letter_text,
+        "coverLetterPdfBase64": cover_letter_pdf_base64,
         "fitScore": results.get('fit_score', 0.5),
         "questionAnswers": results.get('question_answers_detailed', []),
     })
