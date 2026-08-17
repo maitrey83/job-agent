@@ -255,17 +255,30 @@ def process_application(job_desc, resume, contact_name, contact_role, personal_n
 
     print("🧠 Generating Application Packet (Single API Call)...")
     combined_prompt = create_combined_prompt(jd_content, resume_content, contact_name, contact_role, personal_note, fit_note, message_type, specific_hook, questions)
-    response_text = generate_content(combined_prompt, json_mode=True)
-    
-    # Parse JSON (handle potential markdown wrapping)
-    try:
-        # Strip ```json ... ``` if present
-        clean_json = response_text.replace("```json", "").replace("```", "").strip()
-        data = json.loads(clean_json)
-    except json.JSONDecodeError:
-        # Fallback to simple split or just returning error if it fails badly
-        # But let's try to survive partial failure
-        print("⚠️ Failed to parse JSON response. Raw response:\n", response_text)
+
+    # json_mode=True (response_mime_type) makes a valid-JSON response far more
+    # likely but not guaranteed - a large/noisy job description (e.g. a full
+    # scraped page rather than just the JD) can still occasionally produce an
+    # unparseable response. Retrying once resolves most of these, confirmed
+    # against a real request that failed 3 times in a row on one call but
+    # succeeded on a fresh call with identical input - this is intermittent,
+    # not deterministic, so a retry is the right fix rather than assuming the
+    # first failure means a genuine 0 fit.
+    data = None
+    response_text = ""
+    for attempt in range(2):
+        response_text = generate_content(combined_prompt, json_mode=True)
+        try:
+            clean_json = response_text.replace("```json", "").replace("```", "").strip()
+            data = json.loads(clean_json)
+            break
+        except json.JSONDecodeError:
+            if attempt == 0:
+                print("⚠️ Failed to parse JSON response, retrying once...")
+            continue
+
+    if data is None:
+        print("⚠️ Failed to parse JSON response after retry. Raw response:\n", response_text)
         return {
             "cover_letter_text": "Error generating content. Please try again.",
             "outreach_email_text": "",
