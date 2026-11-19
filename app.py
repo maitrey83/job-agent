@@ -194,7 +194,8 @@ def api_generate_packet():
         "coverLetter": "...",
         "coverLetterPdfBase64": "...",  # base64-encoded PDF of coverLetter, for ATS forms that need a file upload rather than a text field
         "fitScore": 0.0-1.0,
-        "questionAnswers": [{"question": "...", "answer": "...", "confidence": 0.0-1.0}, ...]
+        "questionAnswers": [{"question": "...", "answer": "...", "confidence": 0.0-1.0}, ...],
+        "outreachNote": "..."           # optional - "Hi [Name], ..." referral note for a human to send
       }
     """
     if API_KEY:
@@ -240,6 +241,9 @@ def api_generate_packet():
         "coverLetterPdfBase64": cover_letter_pdf_base64,
         "fitScore": results.get('fit_score', 0.5),
         "questionAnswers": results.get('question_answers_detailed', []),
+        # Optional, additive: a <300-char connection note ("Hi [Name], ...") for
+        # the candidate to send by hand for a referral. Never sent automatically.
+        "outreachNote": results.get('outreach_email_text') or '',
     })
 
 

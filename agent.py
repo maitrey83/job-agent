@@ -186,7 +186,19 @@ def create_combined_prompt(jd_content, resume_content, contact_name, contact_rol
              {strategy_instruction}
         """
     else:
-        outreach_instructions = '2. "outreach_email": null (Return null as no contact info provided)'
+        # No specific contact: still draft a short, reusable connection note the
+        # candidate can personalize and send by hand to a hiring manager or an
+        # engineer on the team (referrals convert far better than cold applies).
+        # Applier-Engine surfaces this in its daily summary; it is never sent
+        # automatically.
+        outreach_instructions = """
+        2. "outreach_email": A LinkedIn connection-request note to a hiring manager or engineer on this team.
+           - STRICT LIMIT: under 300 characters total.
+           - Start with exactly "Hi [Name]," (literal placeholder - the candidate fills it in).
+           - Name the specific role, and connect ONE concrete, real experience from the RESUME to the team's work.
+           - Ask for a brief chat or whether they'd be open to referring - one short ask, no pressure.
+           - TONE: warm, specific, human. No "I hope this finds you well", no flattery, no made-up facts.
+        """
 
     questions_instruction = ""
     if questions:
@@ -293,6 +305,9 @@ def process_application(job_desc, resume, contact_name, contact_role, personal_n
     company_name = data.get("company_name", "Company")
     cover_letter_text = data.get("cover_letter", "")
     outreach_email_text = data.get("outreach_email", "")
+    if not isinstance(outreach_email_text, str):
+        # Model occasionally returns null or a nested object; never crash the packet over it.
+        outreach_email_text = "" if outreach_email_text is None else json.dumps(outreach_email_text)
     fit_score = data.get("fit_score", 0.5)
     try:
         fit_score = max(0.0, min(1.0, float(fit_score)))
