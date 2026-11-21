@@ -247,5 +247,61 @@ def api_generate_packet():
     })
 
 
+@app.route('/api/tailor-resume', methods=['POST'])
+def api_tailor_resume():
+    """
+    Per-job resume tailoring for Applier-Engine (see resume_tailor.py for the
+    no-fabrication guarantees). Default is REORDER-ONLY: no sentence is edited.
+
+    Request: {"jobDescription": "...",
+              "resumeText": "...",            # required unless resumeDocxBase64 is given
+              "resumeDocxBase64": "...",      # optional: the candidate's own .docx; tailored in place
+              "allowRewording": false}        # optional, default false
+
+    Response:
+      {"ok": true,
+       "tailoredResumeDocxBase64": "...",   # when a .docx was sent: same design, paragraphs reordered
+       "tailoredResumePdfBase64": "...",    # when no .docx was sent: plain single-column PDF
+       "tailoredResumeText": "...",
+       "changes": {...}, "docxNotes": [...],
+       "atsReport": {"matchRate": 0.0-1.0, "matched": [{"term","found","where"}], "missing": ["..."]}}
+      {"ok": false, "error": "..."}   # caller must fall back to the original resume
+    Always 200 for a well-formed request: a tailoring failure is a normal,
+    expected outcome, not a server error.
+    """
+    if API_KEY:
+        if request.headers.get('X-API-Key') != API_KEY:
+            return jsonify({"error": "Unauthorized"}), 401
+    payload = request.get_json(silent=True) or {}
+    job_description = (payload.get('jobDescription') or '').strip()
+    resume_text = (payload.get('resumeText') or '').strip()
+    docx_b64 = payload.get('resumeDocxBase64') or ''
+    allow_rewording = bool(payload.get('allowRewording')) and not docx_b64
+    if not job_description or not (resume_text or docx_b64):
+        return jsonify({"error": "jobDescription and resumeText (or resumeDocxBase64) are required"}), 400
+    try:
+        import resume_tailor
+        import agent
+        docx_bytes = base64.b64decode(docx_b64) if docx_b64 else None
+        exact = None
+        if docx_bytes:
+            resume_text = resume_tailor.docx_text(docx_bytes)
+            exact = resume_tailor.parse_docx(docx_bytes)  # deterministic; None -> AI parse
+        parsed, tailored, changes, report = resume_tailor.tailor(
+            resume_text, job_description, agent.generate_content, allow_rewording=allow_rewording, parsed=exact)
+        body = {"ok": True, "tailoredResumeText": resume_tailor.resume_to_text(tailored),
+                "changes": changes, "atsReport": report, "docxNotes": []}
+        if docx_bytes:
+            out, notes = resume_tailor.tailor_docx(docx_bytes, parsed, tailored)
+            body["tailoredResumeDocxBase64"] = base64.b64encode(out).decode('ascii')
+            body["docxNotes"] = notes
+        else:
+            body["tailoredResumePdfBase64"] = base64.b64encode(
+                resume_tailor.render_resume_pdf(tailored, sanitize_text)).decode('ascii')
+        return jsonify(body)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"})
+
+
 if __name__ == '__main__':
     app.run(debug=True, port=8000)
