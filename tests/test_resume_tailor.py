@@ -209,7 +209,14 @@ class MatchingTests(unittest.TestCase):
 
 
 class ReorderOnlyAndDocxTests(TailorEndpointTests):
+    # Reorder-only mode asks the model for ids only (ORDER_PROMPT).
     proposal = {
+        "highlight_order": ["h1", "h0"],
+        "experience": [{"job": 0, "order": ["e0b1", "e0b0"]}, {"job": 1, "order": ["e1b1", "e1b0"]}],
+        "skill_order": ["s1", "s0"],
+        "requirements": ["Playwright", "Kubernetes", "CI/CD", "API testing", "Go"],
+    }
+    legacy_proposal = {
         "summary": "Invented summary with 20+ years.",
         "highlight_order": ["h1", "h0"],
         "experience": [{"job": 0, "bullets": [

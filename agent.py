@@ -2,7 +2,8 @@ import click
 import os
 import pathlib
 import dotenv
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 import requests
 from bs4 import BeautifulSoup
 import json
@@ -11,17 +12,48 @@ import re
 # Load environment variables and configure API
 dotenv.load_dotenv()
 
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+# Thinking budget for the packet (fit score + cover letter + answers) call. Measured Nov 2026:
+# 512 gives fit scores as stable as the default at ~85% fewer thinking tokens; 0 caused a
+# failed (0.0) score. Set PACKET_THINKING_BUDGET=-1 for the model default.
+_ptb = os.getenv("PACKET_THINKING_BUDGET", "512")
+PACKET_THINKING_BUDGET = int(_ptb) if _ptb.strip().isdigit() else None
+
+
+class GeminiModel:
+    """Thin adapter over the google-genai SDK (the deprecated google-generativeai
+    package couldn't control "thinking"). Keeps the old call shape -
+    generate_content(prompt, generation_config=dict) -> object with .text and
+    .usage_metadata - so tests can swap in a FakeModel exactly as before.
+
+    generation_config keys: response_mime_type, thinking_budget (0 = off).
+    """
+
+    def __init__(self, api_key, model_name):
+        # JSON mode is only enabled on v1beta (v1 rejects response_mime_type).
+        self.client = genai.Client(api_key=api_key, http_options=genai_types.HttpOptions(api_version="v1beta"))
+        self.model_name = model_name
+
+    def generate_content(self, prompt, generation_config=None):
+        cfg = dict(generation_config or {})
+        kwargs = {}
+        if cfg.get("response_mime_type"):
+            kwargs["response_mime_type"] = cfg["response_mime_type"]
+        if cfg.get("thinking_budget") is not None:
+            kwargs["thinking_config"] = genai_types.ThinkingConfig(thinking_budget=int(cfg["thinking_budget"]))
+        return self.client.models.generate_content(
+            model=self.model_name, contents=prompt,
+            config=genai_types.GenerateContentConfig(**kwargs) if kwargs else None)
+
+
 try:
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    # NOTE: User found 'gemini-1.5-flash' works for them.
-    # Using that model name as it's confirmed to work in their environment.
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    model = GeminiModel(os.getenv("GEMINI_API_KEY"), MODEL_NAME) if os.getenv("GEMINI_API_KEY") else None
 except Exception as e:
     print(f"Error configuring AI model: {e}")
     model = None
 
 # --- Helper function to call the Gemini API ---
-def generate_content(prompt, json_mode=False):
+def generate_content(prompt, json_mode=False, thinking_budget=None):
     """Sends a prompt to the Gemini API and returns the response.
 
     json_mode=True sets response_mime_type to force Gemini to emit valid JSON
@@ -35,11 +67,48 @@ def generate_content(prompt, json_mode=False):
     if not model:
         return "AI model is not configured. Please check your API key."
     try:
-        generation_config = {"response_mime_type": "application/json"} if json_mode else None
-        response = model.generate_content(prompt, generation_config=generation_config)
+        generation_config = {}
+        if json_mode:
+            generation_config["response_mime_type"] = "application/json"
+        if thinking_budget is not None:
+            # Hidden "thinking" is billed as output and was ~70% of all tokens
+            # (measured Nov 2026); structured tasks rarely need much of it.
+            generation_config["thinking_budget"] = thinking_budget
+        response = model.generate_content(prompt, generation_config=generation_config or None)
+        _record_usage(response)
         return response.text
     except Exception as e:
         return f"An error occurred while generating content: {e}"
+
+
+# --- Token accounting (returned to callers as "usage" so spend is visible) ---
+# Gunicorn sync workers serve one request at a time, so a per-process counter
+# reset at the start of each request is accurate.
+USAGE = {"calls": 0, "inputTokens": 0, "outputTokens": 0, "thinkingTokens": 0}
+
+
+def reset_usage():
+    for k in USAGE:
+        USAGE[k] = 0
+
+
+def get_usage():
+    return dict(USAGE)
+
+
+def _record_usage(response):
+    um = getattr(response, "usage_metadata", None)
+    USAGE["calls"] += 1
+    if um is None:
+        return
+    prompt = int(getattr(um, "prompt_token_count", 0) or 0)
+    output = int(getattr(um, "candidates_token_count", 0) or 0)
+    total = int(getattr(um, "total_token_count", 0) or 0)
+    USAGE["inputTokens"] += prompt
+    USAGE["outputTokens"] += output
+    # google-generativeai 0.8.x doesn't expose thoughts_token_count; Gemini 2.5's
+    # hidden "thinking" (billed as output) is whatever the total doesn't explain.
+    USAGE["thinkingTokens"] += int(getattr(um, "thoughts_token_count", 0) or 0) or max(0, total - prompt - output)
 
 # --- Helper function to fetch job description ---
 def fetch_job_description(input_source):
@@ -279,7 +348,7 @@ def process_application(job_desc, resume, contact_name, contact_role, personal_n
     data = None
     response_text = ""
     for attempt in range(2):
-        response_text = generate_content(combined_prompt, json_mode=True)
+        response_text = generate_content(combined_prompt, json_mode=True, thinking_budget=PACKET_THINKING_BUDGET)
         try:
             clean_json = response_text.replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_json)

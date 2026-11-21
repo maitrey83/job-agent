@@ -91,10 +91,12 @@ to regress.
 
 ## Known limitations / good next steps
 
-- Uses the `google-generativeai` Python package, which Google has deprecated
-  in favor of `google-genai`. Still works, but should be migrated at some
-  point — check current model-name compatibility (`gemini-2.5-flash` is
-  hardcoded in `agent.py`) when you do.
+- Uses the `google-genai` SDK through the `GeminiModel` adapter in `agent.py`
+  (migrated Nov 2026 from the deprecated `google-generativeai`, which could not
+  control "thinking"). JSON mode needs `api_version="v1beta"`. Hidden thinking
+  was ~70% of all tokens: the packet call caps it (`PACKET_THINKING_BUDGET`,
+  default 512 - measured as stable as the default), tailoring turns it off.
+  Both endpoints return `usage` token counts.
 - `extract_text_from_file()` (PDF/DOCX/text extraction in `app.py`) is only
   wired into the HTML upload flow, not the API — Applier-Engine extracts
   resume text on its own side (`resumeText.ts`, via `pdf-parse`) and sends

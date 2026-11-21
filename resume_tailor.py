@@ -119,7 +119,7 @@ def _json_call(generate, prompt, attempts=3):
     """Gemini's JSON mode still occasionally emits malformed JSON - retry."""
     last = None
     for _ in range(attempts):
-        raw = generate(prompt, json_mode=True)
+        raw = generate(prompt, json_mode=True, thinking_budget=0)
         try:
             data = json.loads(raw)
             if isinstance(data, dict):
@@ -207,6 +207,41 @@ Job description:
 
 Resume items:
 {items}"""
+
+
+ORDER_PROMPT = """Reorder this candidate's resume items so the ones most relevant to the job come first.
+You only return ids - never text. Every id must be one shown below.
+
+Return JSON:
+{{"highlight_order": ["h1", "h0", ...],
+  "experience": [{{"job": 0, "order": ["e0b3", "e0b0", ...]}}],
+  "skill_order": ["s2", "s0", ...],
+  "requirements": ["short term", ...]}}
+
+"requirements": the 10-20 most important CONCRETE skills, tools, technologies and practices the
+job asks for, each a 1-3 word term as written in the job description (e.g. "Playwright",
+"GraphQL", "GitHub Actions", "API testing", "mentoring"). No soft skills, no job titles, no
+company jargon. List them whether or not the resume has them.
+
+Job description:
+---
+{jd}
+---
+
+Resume items:
+{items}"""
+
+
+def _order_to_proposal(order):
+    """ids-only answer -> the proposal shape validate_and_merge expects (no text)."""
+    return {
+        "summary": "",
+        "highlight_order": order.get("highlight_order") or [],
+        "experience": [{"job": e.get("job"), "bullets": [{"id": i, "text": ""} for i in (e.get("order") or [])]}
+                       for e in (order.get("experience") or [])],
+        "skill_order": [{"category_id": c, "items": []} for c in (order.get("skill_order") or [])],
+        "requirements": order.get("requirements") or [],
+    }
 
 
 def _items_for_prompt(parsed):
@@ -323,7 +358,12 @@ def validate_and_merge(parsed, proposal, resume_text, jd_text, allow_rewording=F
 def tailor(resume_text, jd_text, generate, allow_rewording=False, parsed=None):
     """Full pipeline. Returns (parsed_original, tailored, changes, ats_report). Raises on structural failure."""
     parsed = parsed or parse_resume(resume_text, generate)
-    proposal = _json_call(generate, TAILOR_PROMPT.format(jd=jd_text[:12000], items=_items_for_prompt(parsed)))
+    items = _items_for_prompt(parsed)
+    if allow_rewording:
+        proposal = _json_call(generate, TAILOR_PROMPT.format(jd=jd_text[:12000], items=items))
+    else:
+        # Reorder-only: ask for ids, not text - far fewer output tokens.
+        proposal = _order_to_proposal(_json_call(generate, ORDER_PROMPT.format(jd=jd_text[:12000], items=items)))
     tailored, changes = validate_and_merge(parsed, proposal, resume_text, jd_text, allow_rewording)
     return parsed, tailored, changes, ats_report(proposal.get("requirements") or [], tailored)
 

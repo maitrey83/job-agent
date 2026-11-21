@@ -1,4 +1,4 @@
-google-generativeai
+google-genai==3.6.1
 python-dotenv
 click
 requests

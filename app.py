@@ -211,6 +211,8 @@ def api_generate_packet():
     if not job_description or not resume_text:
         return jsonify({"error": "jobDescription and resumeText are both required"}), 400
 
+    import agent as _agent
+    _agent.reset_usage()
     try:
         results = process_application(
             job_desc=job_description,
@@ -244,6 +246,8 @@ def api_generate_packet():
         # Optional, additive: a <300-char connection note ("Hi [Name], ...") for
         # the candidate to send by hand for a referral. Never sent automatically.
         "outreachNote": results.get('outreach_email_text') or '',
+        # Optional, additive: Gemini token spend for this request.
+        "usage": _agent.get_usage(),
     })
 
 
@@ -279,6 +283,8 @@ def api_tailor_resume():
     allow_rewording = bool(payload.get('allowRewording')) and not docx_b64
     if not job_description or not (resume_text or docx_b64):
         return jsonify({"error": "jobDescription and resumeText (or resumeDocxBase64) are required"}), 400
+    import agent as _agent
+    _agent.reset_usage()
     try:
         import resume_tailor
         import agent
@@ -289,7 +295,7 @@ def api_tailor_resume():
             exact = resume_tailor.parse_docx(docx_bytes)  # deterministic; None -> AI parse
         parsed, tailored, changes, report = resume_tailor.tailor(
             resume_text, job_description, agent.generate_content, allow_rewording=allow_rewording, parsed=exact)
-        body = {"ok": True, "tailoredResumeText": resume_tailor.resume_to_text(tailored),
+        body = {"ok": True, "usage": _agent.get_usage(), "tailoredResumeText": resume_tailor.resume_to_text(tailored),
                 "changes": changes, "atsReport": report, "docxNotes": []}
         if docx_bytes:
             out, notes = resume_tailor.tailor_docx(docx_bytes, parsed, tailored)
