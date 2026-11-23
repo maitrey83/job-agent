@@ -143,7 +143,61 @@ def fetch_job_description(input_source):
 # How every cover letter is written (packet API and web UI). The applicant asked for
 # letters with a human touch that don't read as AI slop (Nov 2026) - keep these rules
 # concrete; vague "sound natural" instructions don't change the output.
-COVER_LETTER_STYLE = """
+BANNED_PHRASES = [
+    'I am writing to',
+    'express my interest',
+    'enthusiastic',
+    'excited to apply',
+    'thrilled',
+    'eager',
+    'passionate',
+    'leverage',
+    'utilize',
+    'spearhead',
+    'synergy',
+    'dynamic',
+    'fast-paced',
+    'cutting-edge',
+    'innovative solutions',
+    'proven track record',
+    'results-driven',
+    'detail-oriented',
+    'team player',
+    'wealth of experience',
+    'align perfectly',
+    'perfect fit',
+    'unique blend',
+    'testament to',
+    'delve',
+    'navigate',
+    'landscape',
+    'realm',
+    'seamless',
+    'foster',
+    'elevate',
+    'make a meaningful impact',
+    'I am confident',
+    'I believe I would be',
+    'valuable asset',
+    'look forward to the opportunity',
+    'Thank you for your time and consideration',
+    "I'm writing",
+    'robust',
+    'aligns well',
+    'well-prepared',
+    'well-positioned',
+    "contribute to the team's goals",
+    'at your convenience',
+    'significant',
+    'diverse',
+    'aligns with',
+    'aligns closely',
+    'I believe',
+    'directly applicable',
+    'could benefit',
+]
+
+_COVER_LETTER_STYLE = """
        Write it the way this candidate would write it themselves: an experienced engineer writing plainly, in first person, to the people they'd work with. It must not read like AI-generated text.
        - 170-250 words in 3 or 4 short paragraphs. Start with "Dear <Company> team," (or "Dear Hiring Manager," if the company is unknown). End with "Best," on its own line, then the candidate's full name exactly as it appears on the RESUME.
        - Open with something specific, never with who the candidate is or that they are applying (no "I'm writing", "I'm reaching out", "regarding the role"): one concrete thing from the JOB DESCRIPTION (the product, the problem this team owns, a stated requirement) tied to something the candidate actually did. Do not restate the job title in the first sentence.
@@ -151,11 +205,12 @@ COVER_LETTER_STYLE = """
        - Don't summarize the fit in abstract terms ("aligns with", "combined with", "well-suited", "well-prepared", "my background could contribute"); the examples show it.
        - Close in one or two sentences with a plain ask to talk.
        - Sound like a person: vary sentence length, use contractions (I've, I'd, that's), prefer short common words, be direct and a little understated. Specific beats impressive.
-       - Never use these words or phrases: "I am writing to", "express my interest", "enthusiastic", "excited to apply", "thrilled", "eager", "passionate", "leverage", "utilize", "spearhead", "synergy", "dynamic", "fast-paced", "cutting-edge", "innovative solutions", "proven track record", "results-driven", "detail-oriented", "team player", "wealth of experience", "align perfectly", "perfect fit", "unique blend", "testament to", "delve", "navigate", "landscape", "realm", "seamless", "foster", "elevate", "make a meaningful impact", "I am confident", "I believe I would be", "valuable asset", "look forward to the opportunity", "Thank you for your time and consideration", "I'm writing", "robust", "aligns well", "well-prepared", "well-positioned", "contribute to the team's goals", "at your convenience", "significant", "diverse".
+       - Never use these words or phrases: {BANNED}.
        - No em dashes or en dashes (use commas, periods or a plain hyphen), no exclamation marks, no bullet points, headings, bold text, or placeholders like [Company].
        - Don't flatter the company or repeat its marketing copy back. Don't say where the posting was seen.
-       - Do not make up facts: no invented years, tools, domains, employers or numbers. If the job wants something the RESUME doesn't show, leave it out rather than stretch.
+       - Do not make up facts: no invented years, tools, domains, employers, habits or numbers, not even softly ("I've often...", "I'm familiar with"). If the job wants something the RESUME doesn't show, leave it out entirely. Never mention the resume itself or what it does or doesn't contain.
 """
+COVER_LETTER_STYLE = _COVER_LETTER_STYLE.replace("{BANNED}", ", ".join(f'"{p}"' for p in BANNED_PHRASES))
 
 
 def tidy_cover_letter(text):
@@ -165,6 +220,53 @@ def tidy_cover_letter(text):
     text = re.sub(r"\s*[\u2014\u2013]\s*", " - ", text)
     text = text.replace("**", "")
     return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+_META_RESUME = re.compile(r"\b(my|the) (resume|cv)\b", re.I)
+
+
+def cover_letter_problems(text):
+    """What a letter still does that the style rules forbid - Gemini follows a list of don'ts only loosely."""
+    if not text:
+        return []
+    low = text.replace("\u2019", "'").lower()
+    out = [f'"{p}"' for p in BANNED_PHRASES if p.lower() in low]
+    if _META_RESUME.search(text):
+        out.append('talks about "my resume" (talk about the work, never about the resume)')
+    if "!" in text:
+        out.append("exclamation mark")
+    return out
+
+
+def polish_cover_letter(text, resume_content, jd_content):
+    """One targeted edit pass when the letter breaks the rules; keeps the original if the edit isn't better."""
+    problems = cover_letter_problems(text)
+    if not problems:
+        return text
+    prompt = f"""
+    Edit this cover letter. Fix exactly these problems and change as little else as possible:
+    - Remove or rephrase: {"; ".join(problems)}
+    - Delete any sentence that claims experience, tools or habits the RESUME below doesn't show, and any sentence about what the resume does or doesn't contain.
+    Keep the greeting, the sign-off, the real numbers from the resume, plain first person with contractions, 170-250 words.
+    Never use: {", ".join(BANNED_PHRASES)}. No em dashes, no exclamation marks. Output only the edited letter.
+
+    --- LETTER ---
+    {text}
+
+    --- JOB DESCRIPTION ---
+    {jd_content[:6000]}
+
+    --- RESUME ---
+    {resume_content}
+    """
+    try:
+        edited = tidy_cover_letter(generate_content(prompt, thinking_budget=PACKET_THINKING_BUDGET))
+    except Exception as e:
+        print(f"⚠️ Cover letter polish failed, keeping the draft: {e}")
+        return text
+    if len(edited) < 400 or len(cover_letter_problems(edited)) >= len(problems):
+        return text
+    return edited
 
 
 # --- New: Helper functions to create specific prompts ---
@@ -390,7 +492,7 @@ def process_application(job_desc, resume, contact_name, contact_role, personal_n
         }
 
     company_name = data.get("company_name", "Company")
-    cover_letter_text = tidy_cover_letter(data.get("cover_letter", ""))
+    cover_letter_text = polish_cover_letter(tidy_cover_letter(data.get("cover_letter", "")), resume_content, jd_content)
     outreach_email_text = data.get("outreach_email", "")
     if not isinstance(outreach_email_text, str):
         # Model occasionally returns null or a nested object; never crash the packet over it.

@@ -115,3 +115,32 @@ class CoverLetterStyleTest(unittest.TestCase):
         out = agent.tidy_cover_letter("Dear team,\n\nI built it — and it shipped.\n\n\n\n**Best,**\nAda")
         self.assertEqual(out, "Dear team,\n\nI built it - and it shipped.\n\nBest,\nAda")
         self.assertEqual(agent.tidy_cover_letter(None), "")
+
+
+class CoverLetterPolishTest(unittest.TestCase):
+    """Second-pass edit when the first draft still breaks the style rules (seen live, Nov 2026)."""
+
+    DRAFT = ("Dear Keeper Security team,\n\nI’m writing about the Lead QA Engineer role. It aligns closely with my background, "
+             "and while my resume doesn't detail Kubernetes, I've often troubleshot deployments. " + "More real detail here. " * 20 +
+             "\n\nBest,\nMaitrey Patel")
+
+    def test_lint_catches_curly_apostrophes_and_resume_talk(self):
+        import agent
+        found = agent.cover_letter_problems(self.DRAFT)
+        self.assertIn('"I\'m writing"', found)
+        self.assertIn('"aligns closely"', found)
+        self.assertTrue(any("resume" in f for f in found))
+        self.assertEqual(agent.cover_letter_problems("Dear team,\n\nI built the gate.\n\nBest,\nAda"), [])
+
+    def test_polish_keeps_the_better_version_only(self):
+        import agent
+        from unittest import mock
+        clean = "Dear Keeper Security team,\n\nSelf-Managed Keeper runs in air-gapped sites. " + "I built that kind of gate. " * 20 + "\n\nBest,\nMaitrey Patel"
+        with mock.patch.object(agent, "generate_content", return_value=clean) as g:
+            self.assertEqual(agent.polish_cover_letter(self.DRAFT, "resume", "jd"), clean)
+            self.assertIn("aligns closely", g.call_args[0][0])
+        with mock.patch.object(agent, "generate_content", return_value=self.DRAFT):
+            self.assertEqual(agent.polish_cover_letter(self.DRAFT, "resume", "jd"), self.DRAFT)  # no better: keep draft
+        with mock.patch.object(agent, "generate_content") as g:
+            agent.polish_cover_letter("Dear team,\n\nI built the gate.\n\nBest,\nAda", "r", "j")
+            g.assert_not_called()  # clean drafts cost nothing extra
