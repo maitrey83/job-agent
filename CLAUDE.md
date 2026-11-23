@@ -110,3 +110,36 @@ to regress.
   with further-along changes to `templates/index.html`/`results.html` and an
   untracked `test_questions.py` that predates the API work above — check
   `git status`/`git diff` before assuming a clean working tree.
+
+## Cover letters (Nov 2026)
+
+The applicant asked for letters with a human touch that don't read as AI,
+and never with invented claims. How a letter is written is defined in
+`agent.py`:
+
+- `BANNED_PHRASES` + `COVER_LETTER_STYLE` - concrete rules used by both the
+  packet prompt and `create_cover_letter_prompt` (web UI): open with something
+  specific from the JD tied to real experience, two resume-backed examples with
+  the resume's own numbers, plain first person with contractions, no stock
+  phrases, no dashes/exclamation marks/placeholders, never mention the resume
+  itself, never claim anything the resume doesn't show (not even softly).
+- `tidy_cover_letter` strips em/en dashes and markdown.
+- `cover_letter_problems` lints a draft; `polish_cover_letter` makes ONE edit
+  call only when the draft breaks a rule, and keeps the edit only if it has
+  fewer problems. Clean drafts cost no extra call.
+- A ban list alone is followed loosely by Gemini - live letters still said
+  "I'm writing" (curly apostrophe) and invented "I've often troubleshot
+  deployments". Check real output against the resume, not just the tone.
+- Applier-Engine lays the letter out as a PDF itself (`src/docs/pdf.ts`), so
+  `coverLetterPdfBase64` here is only its fallback.
+
+## Working from the server
+
+This repo is cloned on MCloudServer at `~/JobBot/job-agent`, next to
+`~/JobBot/Applier-Engine`. Tests: a venv with `pip install -r requirements.txt`,
+then `GEMINI_API_KEY=dummy python -m unittest discover -s tests`. There's no
+real Gemini key locally - real output only comes from the Render deploy, which
+builds automatically from GitHub `main` (the user pushes; the Claude session
+has no push access). Commit with
+`git -c user.name="Maitrey Patel" -c user.email=maitrey83@gmail.com commit`.
+
