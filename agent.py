@@ -140,19 +140,39 @@ def fetch_job_description(input_source):
         except Exception:
              return input_source
 
+# How every cover letter is written (packet API and web UI). The applicant asked for
+# letters with a human touch that don't read as AI slop (Nov 2026) - keep these rules
+# concrete; vague "sound natural" instructions don't change the output.
+COVER_LETTER_STYLE = """
+       Write it the way this candidate would write it themselves: an experienced engineer writing plainly, in first person, to the people they'd work with. It must not read like AI-generated text.
+       - 170-250 words in 3 or 4 short paragraphs. Start with "Dear <Company> team," (or "Dear Hiring Manager," if the company is unknown). End with "Best," on its own line, then the candidate's full name exactly as it appears on the RESUME.
+       - Open with something specific, never with who the candidate is or that they are applying: one concrete thing from the JOB DESCRIPTION (the product, the problem this team owns, a stated requirement) tied to something the candidate actually did. Do not restate the job title in the first sentence.
+       - Then 2 concrete examples from the RESUME closest to this job's main requirements: what the candidate did and what came of it, using the resume's own numbers, and in plain words how that relates to this team's work.
+       - Close in one or two sentences with a plain ask to talk.
+       - Sound like a person: vary sentence length, use contractions (I've, I'd, that's), prefer short common words, be direct and a little understated. Specific beats impressive.
+       - Never use these words or phrases: "I am writing to", "express my interest", "enthusiastic", "excited to apply", "thrilled", "eager", "passionate", "leverage", "utilize", "spearhead", "synergy", "dynamic", "fast-paced", "cutting-edge", "innovative solutions", "proven track record", "results-driven", "detail-oriented", "team player", "wealth of experience", "align perfectly", "perfect fit", "unique blend", "testament to", "delve", "navigate", "landscape", "realm", "seamless", "foster", "elevate", "make a meaningful impact", "I am confident", "I believe I would be", "valuable asset", "look forward to the opportunity", "Thank you for your time and consideration".
+       - No em dashes or en dashes (use commas, periods or a plain hyphen), no exclamation marks, no bullet points, headings, bold text, or placeholders like [Company].
+       - Don't flatter the company or repeat its marketing copy back. Don't say where the posting was seen.
+       - Do not make up facts: no invented years, tools, domains, employers or numbers. If the job wants something the RESUME doesn't show, leave it out rather than stretch.
+"""
+
+
+def tidy_cover_letter(text):
+    """Backstop for the style rules the model most often ignores: dashes and stray markdown."""
+    if not isinstance(text, str):
+        return ""
+    text = re.sub(r"\s*[\u2014\u2013]\s*", " - ", text)
+    text = text.replace("**", "")
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
 # --- New: Helper functions to create specific prompts ---
 def create_cover_letter_prompt(jd_content, resume_content):
     """Creates a detailed prompt for generating a cover letter."""
     return f"""
-    Act as an expert career coach and professional writer. Based on the provided resume and job description,
-    write a professional, concise, and compelling cover letter. The cover letter should be three paragraphs long.
-    - Paragraph 1: State the position being applied for and express enthusiasm for the company and role.
-    - Paragraph 2: Highlight 2-3 key experiences from the resume that directly align with the most important
-      responsibilities in the job description. Connect the candidate's skills to the company's needs.
-    - Paragraph 3: Reiterate interest and include a call to action (e.g., "I am eager to discuss...").
-    
-    IMPORTANT: if details (like company address, hiring manager name, or specific numbers) are not present in the
-    job description, do NOT make them up. Omit them entirely.
+    Based on the provided resume and job description, write the candidate's cover letter for this job.
+{COVER_LETTER_STYLE}
+    Output only the letter text.
 
     --- JOB DESCRIPTION ---
     {jd_content}
@@ -299,11 +319,8 @@ def create_combined_prompt(jd_content, resume_content, contact_name, contact_rol
 
     {outreach_instructions}
 
-    4. "cover_letter": A professional, 3-paragraph cover letter.
-       - Paragraph 1: State position and enthusiasm.
-       - Paragraph 2: Highlight 2-3 key experiences from resume aligning with JD.
-       - Paragraph 3: Reiterate interest and call to action.
-       - IMPORTANT: Do not make up facts. Omit missing details.
+    4. "cover_letter": The candidate's cover letter for this job, as plain text with blank lines between paragraphs.
+{COVER_LETTER_STYLE}
 
     {questions_instruction}
 
@@ -372,7 +389,7 @@ def process_application(job_desc, resume, contact_name, contact_role, personal_n
         }
 
     company_name = data.get("company_name", "Company")
-    cover_letter_text = data.get("cover_letter", "")
+    cover_letter_text = tidy_cover_letter(data.get("cover_letter", ""))
     outreach_email_text = data.get("outreach_email", "")
     if not isinstance(outreach_email_text, str):
         # Model occasionally returns null or a nested object; never crash the packet over it.

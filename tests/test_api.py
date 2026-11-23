@@ -97,3 +97,21 @@ class GeneratePacketTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CoverLetterStyleTest(unittest.TestCase):
+    """The letter must read like the applicant wrote it (Nov 2026): concrete rules in the prompt, dashes tidied after."""
+
+    def test_packet_prompt_carries_the_style_rules(self):
+        import agent
+        p = agent.create_combined_prompt("JD text", "Resume text", "", "")
+        self.assertIn("Never use these words or phrases", p)
+        self.assertIn("Do not make up facts", p)
+        self.assertNotIn("Paragraph 1: State position and enthusiasm", p)
+        self.assertIn("Never use these words or phrases", agent.create_cover_letter_prompt("JD", "Resume"))
+
+    def test_tidy_removes_em_dashes_and_markdown(self):
+        import agent
+        out = agent.tidy_cover_letter("Dear team,\n\nI built it — and it shipped.\n\n\n\n**Best,**\nAda")
+        self.assertEqual(out, "Dear team,\n\nI built it - and it shipped.\n\nBest,\nAda")
+        self.assertEqual(agent.tidy_cover_letter(None), "")
