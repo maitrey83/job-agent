@@ -386,6 +386,9 @@ def _stem(w):
     for suf in ("ship", "ing", "ers", "er", "ed", "es", "s"):
         if w.endswith(suf) and len(w) - len(suf) >= 4:
             return w[: -len(suf)]
+    # Short plurals: "APIs" is "API", "SDKs" is "SDK" (not "ss": "class").
+    if len(w) >= 4 and w.endswith("s") and not w.endswith("ss"):
+        return w[:-1]
     return w
 
 
@@ -393,10 +396,11 @@ def _term_in(term, text):
     """Exact phrase, or every content word of the term (stemmed) present in the text."""
     if _phrase_in(term, text):
         return True
-    words = [_stem(w) for w in re.findall(r"[a-z0-9+#/.-]+", term.lower()) if w not in _STOP]
+    # Edge punctuation is sentence punctuation ("an API."), not part of the word ("node.js").
+    words = [_stem(w.strip("./-")) for w in re.findall(r"[a-z0-9+#/.-]+", term.lower()) if w not in _STOP]
     if not words:
         return False
-    text_stems = {_stem(w) for w in re.findall(r"[a-z0-9+#/.-]+", text)}
+    text_stems = {_stem(w.strip("./-")) for w in re.findall(r"[a-z0-9+#/.-]+", text)}
     return all(w in text_stems for w in words)
 
 

@@ -243,6 +243,12 @@ class ReorderOnlyAndDocxTests(TailorEndpointTests):
         where = {m["term"]: m["where"] for m in report["matched"]}
         self.assertIn("skills", where["Playwright"])
 
+    def test_ats_report_matches_short_plurals(self):
+        import resume_tailor
+        r = {"profile": "Built an API quality framework and a CLI.", "skills": [{"category": "Tools", "items": ["Python SDK"]}]}
+        report = resume_tailor.ats_report(["APIs", "SDKs", "CLIs", "classes"], r)
+        self.assertEqual(report["missing"], ["classes"])
+
     def test_docx_reordered_with_identical_paragraphs(self):
         import io
         from collections import Counter
