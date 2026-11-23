@@ -111,9 +111,17 @@ def _record_usage(response):
     USAGE["thinkingTokens"] += int(getattr(um, "thoughts_token_count", 0) or 0) or max(0, total - prompt - output)
 
 # --- Helper function to fetch job description ---
-def fetch_job_description(input_source):
-    """Fetches job description from a URL or a file path."""
-    if input_source.startswith("http://") or input_source.startswith("https://"):
+def fetch_job_description(input_source, allow_urls=True, allow_files=True):
+    """Fetches job description from a URL or a file path.
+
+    Only the CLI may read local files, and only the CLI/web UI may fetch URLs:
+    on the API this text comes from the caller, and treating it as a path or URL
+    would let anyone read server files (e.g. env) or make the server fetch
+    internal addresses, with the result echoed back in the cover letter.
+    """
+    if not allow_urls and not allow_files:
+        return input_source
+    if allow_urls and (input_source.startswith("http://") or input_source.startswith("https://")):
         try:
             response = requests.get(input_source)
             response.raise_for_status()
@@ -127,6 +135,8 @@ def fetch_job_description(input_source):
             raise click.ClickException(f"Error fetching URL: {e}")
     else:
         # Assume it's a file path unless it looks like a long text blob
+        if not allow_files:
+            return input_source
         try:
             if "\n" in input_source or len(input_source) > 255:
                 # Direct text input
@@ -437,22 +447,24 @@ def create_combined_prompt(jd_content, resume_content, contact_name, contact_rol
     """
 
 # --- Core Logic Function (Reusable) ---
-def process_application(job_desc, resume, contact_name, contact_role, personal_note=None, fit_note=None, output_dir='output', message_type='role_specific', specific_hook=None, questions=None):
+def process_application(job_desc, resume, contact_name, contact_role, personal_note=None, fit_note=None, output_dir='output', message_type='role_specific', specific_hook=None, questions=None, allow_urls=False, allow_files=False):
     """
     Core logic to process the application generation.
     Returns a dictionary with paths to generated files and content.
+
+    allow_urls / allow_files: whether job_desc may be a URL to fetch and
+    job_desc/resume may be local file paths to read. Off by default (text only);
+    only the CLI turns on files, and only the CLI/web UI turn on URLs.
     """
-    jd_content = fetch_job_description(job_desc)
-    
-    # Handle resume input...
-    resume_content = ""
-    try:
-        if os.path.exists(resume):
-             resume_content = pathlib.Path(resume).read_text()
-        else:
-             resume_content = resume
-    except OSError:
-        resume_content = resume
+    jd_content = fetch_job_description(job_desc, allow_urls=allow_urls, allow_files=allow_files)
+
+    resume_content = resume
+    if allow_files:
+        try:
+            if os.path.exists(resume):
+                resume_content = pathlib.Path(resume).read_text()
+        except OSError:
+            resume_content = resume
 
     print("🧠 Generating Application Packet (Single API Call)...")
     combined_prompt = create_combined_prompt(jd_content, resume_content, contact_name, contact_role, personal_note, fit_note, message_type, specific_hook, questions)
@@ -601,7 +613,8 @@ def create_packet(job_desc, resume, contact_name, contact_role, personal_note, f
              resume = click.prompt("Please enter the resume file path", type=click.Path(exists=True, dir_okay=False))
 
         # Call the core logic
-        process_application(job_desc, resume, contact_name, contact_role, personal_note, fit_note, output_dir, message_type, specific_hook)
+        process_application(job_desc, resume, contact_name, contact_role, personal_note, fit_note, output_dir, message_type, specific_hook,
+                            allow_urls=True, allow_files=True)
         
         click.echo("✅ Successfully saved all files.")
         click.echo("\n🎉 Job application packet created successfully! 🎉")

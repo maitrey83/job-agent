@@ -60,11 +60,20 @@ you touch it. Gemini output is not schema-guaranteed.
 
 ## Auth
 
-`APPLIER_API_KEY` env var, checked against the `X-API-Key` header on
-`/api/generate-packet` only (not the HTML routes). If unset, the endpoint is
-open — fine for local dev, not once this is deployed publicly, since every
-call spends Gemini quota. Set it in Render's environment variables and the
-matching `JOB_AGENT_API_KEY` in Applier-Engine's `.env`.
+Only the owner may use this service (Nov 2026). `APPLIER_API_KEY` locks everything:
+
+- `/api/*` routes (`@require_api_key`): `X-API-Key` header, compared with
+  `hmac.compare_digest`. Must match `JOB_AGENT_API_KEY` in Applier-Engine's `.env`.
+- HTML pages `/`, `/download_tmp` (`@require_login`): browser Basic auth, any
+  username, password = `WEB_UI_PASSWORD` if set, else `APPLIER_API_KEY`.
+- **Fail closed on Render**: Render sets `RENDER=true`; with no key there every
+  route returns 503 instead of serving the world on the Gemini quota. With no
+  key locally, everything is open (dev only).
+- Caller text is only text: `process_application(allow_urls=False,
+  allow_files=False)` by default, so the API never reads a server file or
+  fetches a URL named in `jobDescription`/`resumeText` (that was a live
+  file-read/SSRF hole). Only the CLI passes `allow_files=True`; the CLI and web
+  page pass `allow_urls=True`. `tests/test_security.py` covers all of this.
 
 ## How to test
 

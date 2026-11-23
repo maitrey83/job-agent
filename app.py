@@ -1,4 +1,6 @@
-from flask import Flask, render_template, request, send_file, redirect, url_for, jsonify
+from flask import Flask, render_template, request, send_from_directory, jsonify, Response
+import functools
+import hmac
 import os
 from agent import process_application
 from fpdf import FPDF
@@ -20,6 +22,52 @@ os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 # open - fine for quick local testing, not recommended once this is deployed
 # publicly, since every call spends your Gemini quota.
 API_KEY = os.environ.get('APPLIER_API_KEY')
+# Password for the HTML pages (browser login: any username, this password).
+# Defaults to APPLIER_API_KEY so one secret locks everything.
+WEB_PASSWORD = os.environ.get('WEB_UI_PASSWORD') or None
+# Render sets RENDER=true. Deployed, a missing key means every route refuses
+# instead of serving the world on the owner's Gemini quota (fail closed).
+ON_RENDER = bool(os.environ.get('RENDER'))
+
+
+def _matches(provided, secret):
+    return bool(provided) and bool(secret) and hmac.compare_digest(provided.encode(), secret.encode())
+
+
+def _locked_out():
+    """Response when the server has no secret configured but must not be open, else None."""
+    if ON_RENDER and not API_KEY:
+        return jsonify({"error": "Server not configured: set APPLIER_API_KEY"}), 503
+    return None
+
+
+def require_api_key(view):
+    """X-API-Key header must match APPLIER_API_KEY (open only for local dev with no key set)."""
+    @functools.wraps(view)
+    def wrapped(*args, **kwargs):
+        locked = _locked_out()
+        if locked:
+            return locked
+        if API_KEY and not _matches(request.headers.get('X-API-Key'), API_KEY):
+            return jsonify({"error": "Unauthorized"}), 401
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def require_login(view):
+    """Browser Basic auth for the HTML pages: password is WEB_UI_PASSWORD or APPLIER_API_KEY."""
+    @functools.wraps(view)
+    def wrapped(*args, **kwargs):
+        locked = _locked_out()
+        if locked:
+            return locked
+        secret = WEB_PASSWORD or API_KEY
+        if secret:
+            auth = request.authorization
+            if not auth or not _matches(auth.password, secret):
+                return Response('Login required', 401, {'WWW-Authenticate': 'Basic realm="job-agent"'})
+        return view(*args, **kwargs)
+    return wrapped
 
 class PDF(FPDF):
     def header(self):
@@ -102,6 +150,7 @@ def extract_text_from_file(file):
             raise Exception(f"Error reading text file: {e}")
 
 @app.route('/', methods=['GET', 'POST'])
+@require_login
 def index():
     if request.method == 'POST':
         job_desc = request.form.get('job_desc')
@@ -135,7 +184,8 @@ def index():
                 message_type=message_type,
                 specific_hook=specific_hook,
                 questions=questions,
-                output_dir=app.config['OUTPUT_FOLDER']
+                output_dir=app.config['OUTPUT_FOLDER'],
+                allow_urls=True,  # the page accepts a posting URL; never local file paths
             )
             
             # Generate PDF for cover letter (InMemory)
@@ -168,13 +218,17 @@ def index():
     return render_template('index.html')
 
 @app.route('/download_tmp/<filename>')
+@require_login
 def download_tmp(filename):
     import tempfile
-    tmp_dir = tempfile.gettempdir()
-    return send_file(os.path.join(tmp_dir, filename), as_attachment=True)
+    # Only the cover-letter PDFs this app writes - not any file in the temp dir.
+    if not (filename.startswith('cover_letter_') and filename.endswith('.pdf')):
+        return "Not found", 404
+    return send_from_directory(tempfile.gettempdir(), filename, as_attachment=True)
 
 
 @app.route('/api/generate-packet', methods=['POST'])
+@require_api_key
 def api_generate_packet():
     """
     JSON API used by Applier-Engine (src/ai/jobAgentClient.ts) to get a
@@ -198,11 +252,6 @@ def api_generate_packet():
         "outreachNote": "..."           # optional - "Hi [Name], ..." referral note for a human to send
       }
     """
-    if API_KEY:
-        provided_key = request.headers.get('X-API-Key')
-        if provided_key != API_KEY:
-            return jsonify({"error": "Unauthorized"}), 401
-
     payload = request.get_json(silent=True) or {}
     job_description = (payload.get('jobDescription') or '').strip()
     resume_text = (payload.get('resumeText') or '').strip()
@@ -252,6 +301,7 @@ def api_generate_packet():
 
 
 @app.route('/api/tailor-resume', methods=['POST'])
+@require_api_key
 def api_tailor_resume():
     """
     Per-job resume tailoring for Applier-Engine (see resume_tailor.py for the
@@ -273,9 +323,6 @@ def api_tailor_resume():
     Always 200 for a well-formed request: a tailoring failure is a normal,
     expected outcome, not a server error.
     """
-    if API_KEY:
-        if request.headers.get('X-API-Key') != API_KEY:
-            return jsonify({"error": "Unauthorized"}), 401
     payload = request.get_json(silent=True) or {}
     job_description = (payload.get('jobDescription') or '').strip()
     resume_text = (payload.get('resumeText') or '').strip()
